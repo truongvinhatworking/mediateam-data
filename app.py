@@ -26,20 +26,35 @@ if st.session_state.current_user is None:
 
 # --- PHẦN SIDEBAR BÊN DƯỚI (Dùng để hiển thị, KHÔNG ĐỂ CHỌN LẠI) ---
 st.sidebar.subheader("👤 Vai trò hiện tại:")
-# Hiển thị text thay vì selectbox, người dùng không thể đổi được nữa
 st.sidebar.info(f"Đang làm việc với tư cách: **{st.session_state.current_user}**")
-
-if st.sidebar.button("Đăng xuất (Chọn lại vai)"):
+if st.sidebar.button("Đăng xuất"):
     st.session_state.current_user = None
     st.rerun()
-
 st.sidebar.markdown("---")
 
+all_data = sheet.get_all_values()
+# --- XỬ LÝ DỮ LIỆU ---
+all_data = sheet.get_all_values()
 
-# 1. CẤU HÌNH
-scope = ["https://spreadsheets.google.com/feeds", 'https://www.googleapis.com/auth/spreadsheets', "https://www.googleapis.com/auth/drive"]
-creds = ServiceAccountCredentials.from_json_keyfile_name('credentials.json', scope)
-client = gspread.authorize(creds)
+# Kiểm tra nếu sheet không có dữ liệu hoặc chỉ có dòng tiêu đề
+if not all_data or len(all_data) < 1:
+    st.warning("Google Sheet hiện đang trống!")
+    df = pd.DataFrame(columns=["STT", "Chủ đề", "Trạng thái", "Người làm", "Link src", "Link final", "Deadline", "Note", "Lịch sử"])
+else:
+    # Lấy tiêu đề từ dòng đầu tiên
+    header = all_data[0]
+    # Tạo DataFrame từ các dòng còn lại
+    data = all_data[1:] if len(all_data) > 1 else []
+    df = pd.DataFrame(data, columns=header)
+
+# Đảm bảo các cột cần thiết luôn tồn tại để tránh lỗi khi filter
+required_columns = ["STT", "Chủ đề", "Trạng thái", "Người làm", "Link src", "Link final", "Deadline", "Note", "Lịch sử"]
+for col in required_columns:
+    if col not in df.columns:
+        df[col] = ""
+
+# Phần tạo search_key an toàn
+df['search_key'] = (df['Chủ đề'].fillna('').astype(str) + " " + df['Người làm'].fillna('').astype(str)).apply(remove_accents)
 
 def remove_accents(input_str):
     if not isinstance(input_str, str): input_str = str(input_str)
