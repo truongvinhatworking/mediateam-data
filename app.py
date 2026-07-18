@@ -68,19 +68,27 @@ sheet = client.open_by_key("1Yb4hroqlW8mIx0X5wWHa8ggrIUZK3z0Wbk4JavBaavA").works
 # Lấy tất cả dữ liệu thô
 all_data = sheet.get_all_values()
 
-if len(all_data) > 1:
-    # Lấy hàng đầu tiên để làm header, nhưng lấy đúng số lượng cột của nó
-    # Điều này tránh lỗi khi dữ liệu hàng dưới bị thừa cột
-    data_rows = all_data[1:]
-    
-    # Ép tất cả các hàng về đúng số cột bằng với header bạn mong muốn (9 cột)
-    # Chúng ta chỉ lấy 9 phần tử đầu tiên của mỗi hàng
-    cleaned_data = [row[:9] for row in data_rows]
-    
-    header = ["STT", "Chủ đề", "Trạng thái", "Người làm", "Link src", "Link final", "Deadline", "Note", "Lịch sử"]
-    df = pd.DataFrame(cleaned_data, columns=header)
-else:
+# Kiểm tra dữ liệu an toàn
+if not all_data or len(all_data) == 0:
+    st.warning("Google Sheet trống hoặc không thể đọc dữ liệu!")
     df = pd.DataFrame(columns=["STT", "Chủ đề", "Trạng thái", "Người làm", "Link src", "Link final", "Deadline", "Note", "Lịch sử"])
+else:
+    # Lấy header từ dòng đầu tiên của sheet
+    header = all_data[0]
+    # Lấy dữ liệu từ dòng thứ 2 trở đi
+    rows = all_data[1:] if len(all_data) > 1 else []
+    
+    # Tạo DataFrame với kiểm tra độ dài cột
+    df = pd.DataFrame(rows, columns=header)
+
+# Đảm bảo các cột cần thiết luôn tồn tại để tránh lỗi khi lọc
+expected_cols = ["STT", "Chủ đề", "Trạng thái", "Người làm", "Link src", "Link final", "Deadline", "Note", "Lịch sử"]
+for col in expected_cols:
+    if col not in df.columns:
+        df[col] = "" # Nếu thiếu cột, tạo cột trống
+
+# Xử lý tìm kiếm an toàn
+df['search_key'] = (df['Chủ đề'].fillna('').astype(str) + " " + df['Người làm'].fillna('').astype(str)).apply(remove_accents)
 
 # 3. BỘ LỌC (Sidebar)
 
