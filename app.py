@@ -45,6 +45,9 @@ else:
     header = all_data[0]
     df = pd.DataFrame(all_data[1:], columns=header)
 
+    df = pd.DataFrame(all_data[1:], columns=header)
+    df = df.loc[:, ~df.columns.duplicated()]
+
 # Đảm bảo các cột cần thiết
 required_columns = ["STT", "Chủ đề", "Trạng thái", "Người làm", "Link src", "Link final", "Deadline", "Note", "Lịch sử"]
 for col in required_columns:
