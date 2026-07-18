@@ -1,127 +1,67 @@
 import streamlit as st
 import gspread
 import pandas as pd
-from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
 import unicodedata
 import pytz
+import json
 
-# --- TRÊN ĐẦU FILE ---
-if 'current_user' not in st.session_state:
-    st.session_state.current_user = None
-if 'current_user' not in st.session_state:
-    st.session_state.current_user = None
+# 1. CẤU HÌNH KẾT NỐI (Dùng st.secrets theo chuẩn Streamlit)
+def get_connection():
+    # Load credentials từ Streamlit Secrets
+    creds_dict = st.secrets["gcp_service_account"]
+    gc = gspread.service_account_from_dict(creds_dict)
+    return gc
 
-# Logic xác thực
-if st.session_state.current_user is None:
-    st.title("Chào mừng đến với hệ thống!")
-    st.subheader("⚠️ Mày là ai?")
-    with st.form("login_form"):
-        user_choice = st.selectbox("Chọn tên của bạn:", ["Phú", "Thắng", "Nguyên", "Thoại"])
-        submit = st.form_submit_button("Xác nhận")
-        if submit:
-            st.session_state.current_user = user_choice
-            st.rerun()
-    st.stop() 
+# Khởi tạo client
+client = get_connection()
+sheet = client.open_by_key("1Yb4hroqlW8mIx0X5wWHa8ggrIUZK3z0Wbk4JavBaavA").worksheet("data tvn mma")
 
-# --- PHẦN SIDEBAR BÊN DƯỚI (Dùng để hiển thị, KHÔNG ĐỂ CHỌN LẠI) ---
-st.sidebar.subheader("👤 Vai trò hiện tại:")
-st.sidebar.info(f"Đang làm việc với tư cách: **{st.session_state.current_user}**")
-if st.sidebar.button("Đăng xuất"):
-    st.session_state.current_user = None
-    st.rerun()
-st.sidebar.markdown("---")
-
-all_data = sheet.get_all_values()
-# --- XỬ LÝ DỮ LIỆU ---
-all_data = sheet.get_all_values()
-
-# Kiểm tra nếu sheet không có dữ liệu hoặc chỉ có dòng tiêu đề
-if not all_data or len(all_data) < 1:
-    st.warning("Google Sheet hiện đang trống!")
-    df = pd.DataFrame(columns=["STT", "Chủ đề", "Trạng thái", "Người làm", "Link src", "Link final", "Deadline", "Note", "Lịch sử"])
-else:
-    # Lấy tiêu đề từ dòng đầu tiên
-    header = all_data[0]
-    # Tạo DataFrame từ các dòng còn lại
-    data = all_data[1:] if len(all_data) > 1 else []
-    df = pd.DataFrame(data, columns=header)
-
-# Đảm bảo các cột cần thiết luôn tồn tại để tránh lỗi khi filter
-required_columns = ["STT", "Chủ đề", "Trạng thái", "Người làm", "Link src", "Link final", "Deadline", "Note", "Lịch sử"]
-for col in required_columns:
-    if col not in df.columns:
-        df[col] = ""
-
-# Phần tạo search_key an toàn
-df['search_key'] = (df['Chủ đề'].fillna('').astype(str) + " " + df['Người làm'].fillna('').astype(str)).apply(remove_accents)
-
+# Các hàm hỗ trợ
 def remove_accents(input_str):
     if not isinstance(input_str, str): input_str = str(input_str)
     nfkd_form = unicodedata.normalize('NFKD', input_str)
     return "".join([c for c in nfkd_form if not unicodedata.combining(c)]).lower()
 
-# 2. LẤY DỮ LIỆU
-tab_name = "data tvn mma" 
-sheet = client.open_by_key("1Yb4hroqlW8mIx0X5wWHa8ggrIUZK3z0Wbk4JavBaavA").worksheet(tab_name)
+# 2. XÁC THỰC NGƯỜI DÙNG
+if 'current_user' not in st.session_state:
+    st.session_state.current_user = None
 
-# Lấy tất cả dữ liệu thô
+if st.session_state.current_user is None:
+    st.title("Chào mừng đến với hệ thống!")
+    user_choice = st.selectbox("Chọn tên của bạn:", ["Phú", "Thắng", "Nguyên", "Thoại"])
+    if st.button("Xác nhận"):
+        st.session_state.current_user = user_choice
+        st.rerun()
+    st.stop()
+
+# 3. LẤY VÀ XỬ LÝ DỮ LIỆU
 all_data = sheet.get_all_values()
 
-# Kiểm tra dữ liệu an toàn
 if not all_data or len(all_data) == 0:
-    st.warning("Google Sheet trống hoặc không thể đọc dữ liệu!")
-    df = pd.DataFrame(columns=["STT", "Chủ đề", "Trạng thái", "Người làm", "Link src", "Link final", "Deadline", "Note", "Lịch sử"])
+    st.error("Sheet không có dữ liệu!")
+    st.stop()
 else:
-    # Lấy header từ dòng đầu tiên của sheet
     header = all_data[0]
-    # Lấy dữ liệu từ dòng thứ 2 trở đi
-    rows = all_data[1:] if len(all_data) > 1 else []
-    
-    # Tạo DataFrame với kiểm tra độ dài cột
-    df = pd.DataFrame(rows, columns=header)
+    df = pd.DataFrame(all_data[1:], columns=header)
 
-# Đảm bảo các cột cần thiết luôn tồn tại để tránh lỗi khi lọc
-expected_cols = ["STT", "Chủ đề", "Trạng thái", "Người làm", "Link src", "Link final", "Deadline", "Note", "Lịch sử"]
-for col in expected_cols:
+# Đảm bảo các cột cần thiết
+required_columns = ["STT", "Chủ đề", "Trạng thái", "Người làm", "Link src", "Link final", "Deadline", "Note", "Lịch sử"]
+for col in required_columns:
     if col not in df.columns:
-        df[col] = "" # Nếu thiếu cột, tạo cột trống
+        df[col] = ""
 
-# Xử lý tìm kiếm an toàn
 df['search_key'] = (df['Chủ đề'].fillna('').astype(str) + " " + df['Người làm'].fillna('').astype(str)).apply(remove_accents)
 
-# 3. BỘ LỌC (Sidebar)
+# 4. GIAO DIỆN & TƯƠNG TÁC
+st.sidebar.info(f"User: **{st.session_state.current_user}**")
+if st.sidebar.button("Đăng xuất"):
+    st.session_state.current_user = None
+    st.rerun()
 
-st.sidebar.subheader("🔍 Bộ lọc nhanh")
-show_deleted = st.sidebar.checkbox("Hiển thị cả các task đã xóa")
+st.dataframe(df, use_container_width=True)
 
-# Lọc theo Trạng thái (vẫn giữ logic tự động để linh hoạt)
-unique_statuses = sorted([s for s in df['Trạng thái'].unique() if s])
-status_filter = st.sidebar.multiselect("Lọc theo Trạng thái:", unique_statuses)
-
-# Lọc theo Người làm (Cố định 4 người theo yêu cầu)
-person_options = ["Phú", "Thắng", "Nguyên", "Thoại"]
-person_filter = st.sidebar.multiselect("Lọc theo Người làm:", person_options)
-
-# --- ÁP DỤNG BỘ LỌC VÀO BẢNG CHÍNH ---
-filtered_df = df.copy()
-
-# Lọc Trạng thái
-if status_filter:
-    filtered_df = filtered_df[filtered_df['Trạng thái'].isin(status_filter)]
-
-# CẢI TIẾN: Lọc Người làm theo kiểu tìm kiếm chuỗi
-if person_filter:
-    # Tạo một điều kiện lọc: giữ lại những dòng có chứa ÍT NHẤT một trong các tên được chọn
-    # Dùng regex=False để tìm chuỗi đơn giản, case=False để không phân biệt hoa thường
-    condition = filtered_df['Người làm'].apply(lambda x: any(p.lower() in str(x).lower() for p in person_filter))
-    filtered_df = filtered_df[condition]
-
-# Loại bỏ "Đã xóa" nếu không bật checkbox
-if not show_deleted:
-    filtered_df = filtered_df[filtered_df['Trạng thái'] != "Đã xóa"]
-
-st.dataframe(filtered_df, use_container_width=True)
+# (Tiếp tục các phần Form thêm/sửa/xóa của bạn ở đây...)
 
 # 4. FORM THÊM DỮ LIỆU
 st.subheader("📝 Thêm nội dung mới")
