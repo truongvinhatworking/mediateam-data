@@ -8,8 +8,16 @@ import json
 
 # 1. CẤU HÌNH KẾT NỐI (Dùng st.secrets theo chuẩn Streamlit)
 def get_connection():
-    # Load credentials từ Streamlit Secrets
-    creds_dict = st.secrets["gcp_service_account"]
+    # Thử lấy từ Streamlit Secrets trước (dành cho môi trường Cloud)
+    if "gcp_service_account" in st.secrets:
+        creds_dict = st.secrets["gcp_service_account"]
+    else:
+        # Nếu không thấy (đang chạy local/codespace), load từ file json cục bộ
+        # Đảm bảo file 'credentials.json' đã được upload vào thư mục gốc của project
+        import json
+        with open("credentials.json") as f:
+            creds_dict = json.load(f)
+            
     gc = gspread.service_account_from_dict(creds_dict)
     return gc
 
